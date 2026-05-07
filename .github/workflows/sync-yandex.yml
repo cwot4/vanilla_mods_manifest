@@ -1,0 +1,42 @@
+name: Sync to Yandex Disk
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload to Yandex Disk
+        env:
+          YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
+          YANDEX_FOLDER: core_aquila
+        run: |
+          upload() {
+            local file="$1"
+            local remote_name="$2"
+            local remote_path="disk:/${YANDEX_FOLDER}/${remote_name}"
+            echo "Uploading ${remote_name}..."
+            href=$(curl -sf \
+              -H "Authorization: OAuth ${YANDEX_TOKEN}" \
+              "https://cloud-api.yandex.net/v1/disk/resources/upload?path=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${remote_path}'))")&overwrite=true" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['href'])")
+            if [ -z "$href" ]; then
+              echo "ERROR: не удалось получить URL для ${remote_name}"
+              exit 1
+            fi
+            curl -sf -X PUT "$href" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@${file}"
+            echo "OK: ${remote_name}"
+          }
+
+          curl -sL "https://github.com/${{ github.repository }}/releases/latest/download/Mods.json" \
+            -o /tmp/vanilla_Mods.json
+          upload /tmp/vanilla_Mods.json "vanilla_Mods.json"
+          echo "Sync complete!"
